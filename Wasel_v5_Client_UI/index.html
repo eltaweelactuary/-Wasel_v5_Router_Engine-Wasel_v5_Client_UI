@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset='utf-8'>
+    <meta name='viewport' content='width=device-width,initial-scale=1'>
+    <title>Wasel v5 - Smart Router Engine & Chat</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box
+        }
+
+        body {
+            background: #0a0a0a;
+            font-family: 'Cairo', sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            color: #fff;
+        }
+
+        #top-bar {
+            padding: 15px 25px;
+            background: linear-gradient(135deg, #111 0%, #1a1a2e 100%);
+            border-bottom: 1px solid #222;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+
+        #brand {
+            color: #00ff88;
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-shadow: 0 0 20px rgba(0, 255, 136, 0.15);
+        }
+
+        #status {
+            font-size: 12px;
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #ws-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ff3333;
+            display: inline-block;
+            transition: background 0.5s;
+            box-shadow: 0 0 6px currentColor;
+        }
+
+        #ws-dot.on {
+            background: #00ff88;
+            box-shadow: 0 0 8px rgba(0, 255, 136, 0.6);
+        }
+
+        .btn {
+            padding: 10px 24px;
+            font-size: 15px;
+            font-weight: bold;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        #startBtn {
+            background: linear-gradient(135deg, #00ff88, #00cc6a);
+            color: #000;
+            box-shadow: 0 4px 15px rgba(0, 255, 136, 0.3);
+            margin-top: 15px;
+            pointer-events: auto;
+        }
+
+        #startBtn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(0, 255, 136, 0.4);
+        }
+
+        #startBtn.active {
+            background: linear-gradient(135deg, #ff3333, #cc2222);
+            color: #fff;
+            box-shadow: 0 4px 15px rgba(255, 51, 51, 0.3);
+        }
+
+        #main-content {
+            flex: 1;
+            display: flex;
+            direction: rtl;
+            min-height: 0;
+        }
+
+        #video-container {
+            flex: 1;
+            position: relative;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            border-left: 1px solid #222;
+            overflow: hidden;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1)
+        }
+
+        #overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 40px 25px 30px;
+            background: linear-gradient(transparent 0%, rgba(0, 0, 0, 0.9) 60%);
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            pointer-events: none;
+        }
+
+        #overlay * {
+            pointer-events: auto;
+        }
+
+        #live-word {
+            color: #0ff;
+            font-size: 48px;
+            font-weight: 700;
+            min-height: 70px;
+            transition: all 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+            filter: drop-shadow(0 0 15px rgba(0, 255, 255, 0.2));
+            margin-bottom: -5px;
+            pointer-events: auto;
+        }
+
+        #live-word.flash {
+            animation: wordFlash 0.5s ease;
+        }
+
+        @keyframes wordFlash {
+            0% {
+                transform: scale(1.15);
+                filter: drop-shadow(0 0 30px rgba(0, 255, 255, 0.6))
+            }
+
+            100% {
+                transform: scale(1);
+                filter: drop-shadow(0 0 15px rgba(0, 255, 255, 0.2))
+            }
+        }
+
+        #chat-sidebar {
+            width: 400px;
+            background: linear-gradient(180deg, #0d0d1a 0%, #111 100%);
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #1a1a2e;
+        }
+
+        #chat-header {
+            padding: 15px 20px;
+            background: #0f0f1f;
+            border-bottom: 1px solid #1a1a2e;
+            font-size: 14px;
+            color: #8888cc;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #chat-log {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            scroll-behavior: smooth;
+        }
+
+        #chat-log::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        #chat-log::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 4px;
+        }
+
+        .msg {
+            padding: 14px 18px;
+            border-radius: 16px;
+            font-size: 15px;
+            line-height: 1.7;
+            animation: msgIn 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+            max-width: 92%;
+            word-wrap: break-word;
+        }
+
+        @keyframes msgIn {
+            from {
+                opacity: 0;
+                transform: translateY(12px) scale(0.97)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1)
+            }
+        }
+
+        .msg.user {
+            background: linear-gradient(135deg, #0a2e1c, #113a29);
+            align-self: flex-start;
+            color: #00ff88;
+            border-top-right-radius: 4px;
+            border: 1px solid rgba(0, 255, 136, 0.15);
+            box-shadow: 0 2px 10px rgba(0, 255, 136, 0.05);
+        }
+
+        .msg.bot {
+            background: linear-gradient(135deg, #141430, #1a1a3a);
+            align-self: flex-end;
+            color: #c0d0ff;
+            border-top-left-radius: 4px;
+            border: 1px solid rgba(68, 102, 170, 0.2);
+            box-shadow: 0 2px 10px rgba(68, 102, 170, 0.05);
+        }
+
+        .msg.typing {
+            background: #161622;
+            color: #666;
+            border: 1px solid #222;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .typing-dots {
+            display: flex;
+            gap: 4px;
+        }
+
+        .typing-dots span {
+            width: 6px;
+            height: 6px;
+            background: #555;
+            border-radius: 50%;
+            animation: dotBounce 1.4s infinite ease-in-out;
+        }
+
+        .typing-dots span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-dots span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes dotBounce {
+
+            0%,
+            80%,
+            100% {
+                transform: scale(0.6);
+                opacity: 0.4
+            }
+
+            40% {
+                transform: scale(1);
+                opacity: 1
+            }
+        }
+
+        #composer {
+            padding: 20px;
+            background: #0f0f1a;
+            border-top: 1px solid #1a1a2e;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        #sentenceBox {
+            width: 100%;
+            padding: 14px 18px;
+            background: #0a0a14;
+            border: 1px solid #2a2a44;
+            color: #fff;
+            border-radius: 12px;
+            font-family: inherit;
+            font-size: 16px;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        #sentenceBox:focus {
+            border-color: #00ff88;
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.1);
+        }
+
+        #sentenceBox::placeholder {
+            color: #444;
+        }
+
+        #sendBtn {
+            background: linear-gradient(135deg, #1a1a3a, #2a2a5a);
+            color: #8888cc;
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px solid #2a2a44;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        #sendBtn:hover {
+            background: linear-gradient(135deg, #00cc6a, #00ff88);
+            color: #000;
+            border-color: transparent;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(0, 255, 136, 0.3);
+        }
+
+        #sendBtn:disabled {
+            background: #111;
+            color: #333;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+            border-color: #1a1a1a;
+        }
+
+        #perf-badge {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            padding: 6px 14px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid #333;
+            border-radius: 20px;
+            font-size: 11px;
+            color: #888;
+            backdrop-filter: blur(4px);
+            z-index: 20;
+        }
+    </style>
+</head>
+
+<body dir="rtl">
+
+    <div id="top-bar">
+        <div id="brand">WASEL v5 PRO — SMART ROUTER ENGINE</div>
+        <div id="status"><span id="ws-dot" class="on"></span> <span id="status-text">متصل محلياً V5 ⚡</span></div>
+    </div>
+
+    <div id="main-content">
+        <div id="chat-sidebar">
+            <div id="chat-header">💬 محادثة خدمة العملاء</div>
+            <div id="chat-log">
+                <div class="msg bot">أهلاً بيك! 👋 أنا مساعدك الذكي من كونيكتا. ابدأ بالإشارة وهجمّع الكلام، وبعدين
+                    ابعته وهرد عليك فوراً!</div>
+            </div>
+            <div id="composer">
+                <input type="text" id="sentenceBox" placeholder="الترجمة هتتجمع هنا... عدّلها لو حبيت ثم اضغط إرسال">
+                <div
+                    style="display:flex; justify-content:space-between; align-items:flex-start; margin-top:5px; flex-direction:column; gap:8px;">
+                    <label
+                        style="color:#8888cc; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                        <input type="checkbox" id="autoSendToggle"
+                            style="accent-color:#00ff88; width:16px; height:16px;" checked> إرسال تلقائي للرد (توقف
+                        ثانيتين)
+                    </label>
+                    <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
+                        <label
+                            style="color:#ffaa00; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                            <input type="checkbox" id="geminiToggle"
+                                style="accent-color:#ffaa00; width:16px; height:16px;" checked> تفعيل مسار الذكاء
+                            الاصطناعي (Gemini)
+                        </label>
+                    </div>
+                    <button class="btn" id="sendBtn" onclick="sendToChat()">📨 إرسال للشات</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="video-container">
+            <div id="perf-badge">⚡ <span id="perf-ms">—</span>ms (<span id="source-badge">Idle</span>)</div>
+            <video id="v" autoplay playsinline muted></video>
+            <div id="literal-word" class="flash" style="position: absolute; right: 30px; bottom: 150px; color: #ffaa00; font-size: 30px; font-weight: 700; text-shadow: 0 0 15px rgba(255,170,0,0.6); pointer-events: none; direction: ltr;"></div>
+            <div id="overlay">
+                <div id="live-word">في انتظار الكاميرا...</div>
+                <button class="btn" id="startBtn" onclick="toggleAnalysis()">▶ تشغيل الترجمة (MediaPipe)</button>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="cv" style="display:none"></canvas>
+
+    <script>
+        // 🛡️ API Proxy is active. The SaaS Tech is hidden behind the Python server.
+        const API_URL = '';
+
+        var v = document.getElementById('v'), cv = document.getElementById('cv');
+        var cx = cv.getContext('2d', { willReadFrequently: true });
+        var tx = document.getElementById('live-word');
+        var stText = document.getElementById('status-text');
+        var btn = document.getElementById('startBtn');
+        var sentenceBox = document.getElementById('sentenceBox');
+        var chatLog = document.getElementById('chat-log');
+        var sendBtnEl = document.getElementById('sendBtn');
+        var perfMs = document.getElementById('perf-ms');
+        var sourceBadge = document.getElementById('source-badge');
+        var autoSendToggle = document.getElementById('autoSendToggle');
+
+        let wordTypingTimeout = null;
+        function handleWordReceivedWordByWord(words) {
+            let i = 0;
+            // Start fresh for the new sentence typing
+            sentenceBox.value = "";
+            clearTimeout(wordTypingTimeout);
+            
+            function typeNextWord() {
+                if(i < words.length) {
+                    let current = sentenceBox.value.trim();
+                    sentenceBox.value = current + (current.length > 0 ? ' ' : '') + words[i];
+                    i++;
+                    wordTypingTimeout = setTimeout(typeNextWord, 400); // 400ms delay per word
+                } else {
+                    // Finished typing the sentence, execute auto-send if enabled
+                    if (autoSendToggle.checked && !sendBtnEl.disabled) {
+                        setTimeout(sendToChat, 800); // brief pause so user can read the complete sentence
+                    }
+                }
+            }
+            typeNextWord();
+        }
+
+        function addMsg(text, who) {
+            var div = document.createElement('div');
+            div.className = 'msg ' + who;
+            if (who === 'typing') {
+                div.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div> جاري الكتابة...';
+            } else {
+                div.textContent = text;
+            }
+            chatLog.appendChild(div);
+            chatLog.scrollTop = chatLog.scrollHeight;
+            return div;
+        }
+
+        function sendToChat() {
+            var text = sentenceBox.value.trim();
+            if (!text) return;
+
+            addMsg('🤟 ' + text, 'user');
+            sentenceBox.value = '';
+
+            sendBtnEl.disabled = true;
+            sendBtnEl.textContent = '⏳ جاري الرد...';
+            var typingMsg = addMsg('', 'typing');
+
+            fetch(API_URL + '/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: text })
+            })
+                .then(r => r.json())
+                .then(d => {
+                    if (typingMsg.parentNode) chatLog.removeChild(typingMsg);
+                    if (d.reply) {
+                        var words = d.reply.split(' ');
+                        var botMsg = addMsg('🤖 ', 'bot');
+                        var i = 0;
+                        function typeWord() {
+                            if (i < words.length) {
+                                botMsg.textContent += (i > 0 ? ' ' : '') + words[i];
+                                chatLog.scrollTop = chatLog.scrollHeight;
+                                i++;
+                                setTimeout(typeWord, 40);
+                            }
+                        }
+                        typeWord();
+                    }
+                })
+                .catch(e => {
+                    if (typingMsg.parentNode) chatLog.removeChild(typingMsg);
+                    addMsg('🤖 حصل مشكلة تقنية، جرب تاني.', 'bot');
+                })
+                .finally(() => {
+                    sendBtnEl.disabled = false;
+                    sendBtnEl.textContent = '📨 إرسال للشات';
+                });
+        }
+
+        document.getElementById('sentenceBox').addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendToChat(); }
+        });
+
+        let sequence = [];
+        let isProcessing = false;
+        let running = false;
+
+        function toggleAnalysis() {
+            if (!running) {
+                running = true;
+                btn.textContent = "⏹ إيقاف الترجمة";
+                btn.classList.add('active');
+                tx.textContent = 'قم بعمل إشارة...';
+                tx.style.color = '#aaa';
+            } else {
+                running = false;
+                btn.textContent = "▶ تشغيل الترجمة (MediaPipe)";
+                btn.classList.remove('active');
+                tx.textContent = 'الترجمة متوقفة';
+                tx.style.color = '#aaa';
+                sequence = [];
+            }
+        }
+
+        const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.6,
+            minTrackingConfidence: 0.5
+        });
+
+        hands.onResults(results => {
+            if (!running || isProcessing) return;
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                let frameData = [];
+                for (let lm of results.multiHandLandmarks[0]) {
+                    frameData.push(lm.x, lm.y, lm.z);
+                }
+                sequence.push(frameData);
+                stText.textContent = `جاري التقاط الإطارات: ${sequence.length}/15`;
+
+                if (sequence.length >= 15) {
+                    isProcessing = true;
+                    tx.innerText = "⚡ جاري التحليل (Fast-Path)...";
+                    tx.style.color = "#ffaa00";
+                    sendToEngine([...sequence]);
+                    sequence = [];
+                }
+            } else {
+                sequence = [];
+                stText.textContent = 'متصل محلياً V5 ⚡ (في انتظار حركة)';
+            }
+        });
+
+        const camera = new Camera(v, {
+            onFrame: async () => { if (running) await hands.send({ image: v }); },
+            width: 640, height: 480
+        });
+
+        camera.start().then(() => {
+            tx.innerText = "الكاميرا جاهزة. اضغط تشغيل ▶";
+            tx.style.color = "#888";
+        });
+
+        function sendToEngine(seq) {
+            cv.width = 320; cv.height = 240;
+            cx.save(); cx.scale(-1, 1); cx.drawImage(v, -320, 0, 320, 240); cx.restore();
+            const fallbackImage = cv.toDataURL('image/webp', 0.2);
+
+            fetch(API_URL + '/t', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sequence: seq,
+                    image: fallbackImage,
+                    gemini_enabled: document.getElementById('geminiToggle').checked
+                })
+            })
+                .then(r => r.json())
+                .then(d => {
+                    if (d.translation !== "..." && !d.translation.startsWith("Err")) {
+                        tx.innerText = d.translation;
+                        tx.style.color = "#00ff88";
+                        tx.classList.remove('flash');
+                        void tx.offsetWidth;
+                        tx.classList.add('flash');
+                        
+                        // Show literal deaf words on the side/above in a different color
+                        var litEl = document.getElementById('literal-word');
+                        if(litEl && d.literal_words) {
+                            litEl.innerText = d.literal_words.join(" + ");
+                            litEl.classList.remove("flash");
+                            void litEl.offsetWidth;
+                            litEl.classList.add("flash");
+                        }
+
+                        // Type out the STRICT sentence word by word in the chat box
+                        handleWordReceivedWordByWord(d.translation.split(" "));
+                    } else {
+                        tx.innerText = "إشارة غير معروفة";
+                        tx.style.color = "#555";
+                    }
+
+                    perfMs.innerText = d.latency_ms;
+                    sourceBadge.innerText = String(d.source).toUpperCase();
+
+                    // Cooldown
+                    setTimeout(() => { isProcessing = false; }, 500);
+                })
+                .catch(e => {
+                    setTimeout(() => { isProcessing = false; }, 500);
+                });
+        }
+    </script>
+</body>
+
+</html>
